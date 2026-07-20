@@ -1,0 +1,817 @@
+```html
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>StudyQuest</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@1,900&family=Noto+Sans+JP:wght@700;900&display=swap');
+    
+    :root {
+      --color-sky: #e0f2fe;
+      --color-green: #dcfce7;
+      --color-yellow: #fbbf24;
+      --color-orange: #f97316;
+    }
+    
+    body {
+      font-family: 'Montserrat', 'Noto Sans JP', sans-serif;
+      background-color: #f0fdf4;
+      overflow-x: hidden;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .slant { transform: skewX(-5deg); }
+    .slant-reverse { transform: skewX(5deg); }
+    
+    .font-heavy {
+      font-weight: 900;
+      font-style: italic;
+    }
+
+    /* Animations */
+    @keyframes flash-yellow {
+      0% { background-color: transparent; }
+      50% { background-color: rgba(251, 191, 36, 0.8); }
+      100% { background-color: transparent; }
+    }
+    .anim-flash { animation: flash-yellow 0.3s ease-out; }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px) rotate(-1deg); }
+      50% { transform: translateX(5px) rotate(1deg); }
+      75% { transform: translateX(-5px) rotate(-1deg); }
+    }
+    .anim-shake { animation: shake 0.4s ease-in-out; }
+
+    @keyframes pop-in {
+      0% { transform: scale(0.1) skewX(-5deg); opacity: 0; }
+      70% { transform: scale(1.2) skewX(-5deg); opacity: 1; }
+      100% { transform: scale(1) skewX(-5deg); opacity: 1; }
+    }
+    .anim-pop { animation: pop-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+    
+    @keyframes speed-line {
+      0% { background-position: 0 0; }
+      100% { background-position: 100% 100%; }
+    }
+    
+    .speed-lines {
+      background-image: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 10px,
+        rgba(255,255,255,0.3) 10px,
+        rgba(255,255,255,0.3) 20px
+      );
+      animation: speed-line 0.5s linear infinite;
+    }
+
+    /* Screen Management */
+    .screen { display: none; padding-bottom: 80px; }
+    .screen.active { display: block; }
+    
+    /* Header Bars */
+    .status-bar {
+      background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(224,242,254,0.9));
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Custom Gradients */
+    .bg-stadium-lanes {
+      background: linear-gradient(105deg, #ef4444 25%, #eab308 25%, #eab308 50%, #3b82f6 50%, #3b82f6 75%, #22c55e 75%);
+    }
+    
+    #canvas-layer {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body class="text-gray-800 h-screen w-screen overflow-hidden flex flex-col">
+
+  <!-- Effect Canvas -->
+  <canvas id="canvas-layer"></canvas>
+
+  <!-- Flash Overlay -->
+  <div id="flash-overlay" class="fixed inset-0 pointer-events-none z-50 hidden"></div>
+
+  <!-- Quest Popup Overlay -->
+  <div id="quest-popup" class="fixed inset-0 z-40 hidden flex items-center justify-center bg-black/60 speed-lines">
+    <div class="slant w-full bg-gradient-to-r from-purple-500 via-pink-500 to-sky-400 p-4 shadow-2xl transform scale-0" id="quest-popup-banner">
+      <div class="slant-reverse text-center">
+        <h1 class="text-white text-5xl font-heavy drop-shadow-lg" id="quest-popup-text">NEW! Q.142</h1>
+        <p class="text-yellow-200 text-xl font-heavy mt-2">挑戦！</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header Status -->
+  <header class="fixed top-0 w-full z-30 p-2 pointer-events-none">
+    <div class="flex flex-col gap-1 max-w-md mx-auto">
+      <div class="flex justify-between gap-1">
+        <!-- 通貨A (Score) -->
+        <div class="status-bar flex-1 rounded-lg p-1 border-b-2 border-yellow-400 slant flex items-center justify-between">
+          <span class="text-xs font-bold text-yellow-600 slant-reverse ml-1">SCORE</span>
+          <span class="text-lg font-heavy text-yellow-500 slant-reverse" id="ui-scoreA">0</span>
+        </div>
+        <!-- 熱血コイン -->
+        <div class="status-bar flex-1 rounded-lg p-1 border-b-2 border-orange-500 slant flex items-center justify-between">
+          <span class="text-xs font-bold text-orange-600 slant-reverse ml-1">COIN</span>
+          <span class="text-lg font-heavy text-orange-500 slant-reverse" id="ui-coins">0</span>
+        </div>
+      </div>
+      <div class="flex justify-between gap-1">
+        <!-- 通貨B (Weak Overcome) -->
+        <div class="status-bar flex-1 rounded-lg p-1 border-b-2 border-red-400 slant flex items-center justify-between">
+          <span class="text-xs font-bold text-red-500 slant-reverse ml-1">OVERCOME</span>
+          <span class="text-sm font-heavy text-red-500 slant-reverse" id="ui-scoreB">0</span>
+        </div>
+        <!-- 通貨C (Clear Rate) -->
+        <div class="status-bar flex-1 rounded-lg p-1 border-b-2 border-blue-400 slant flex items-center justify-between">
+          <span class="text-xs font-bold text-blue-500 slant-reverse ml-1">RATE</span>
+          <span class="text-sm font-heavy text-blue-500 slant-reverse" id="ui-scoreC">0.0%</span>
+        </div>
+        <!-- RPM -->
+        <div class="status-bar flex-1 rounded-lg p-1 border-b-2 border-green-500 slant flex items-center justify-between bg-black">
+          <span class="text-xs font-bold text-green-400 slant-reverse ml-1">RPM</span>
+          <span class="text-sm font-heavy text-white slant-reverse" id="ui-rpm">0</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 w-full max-w-md mx-auto pt-24 pb-20 overflow-y-auto relative z-10" id="main-container">
+    
+    <!-- ================= HOME SCREEN ================= -->
+    <div id="screen-home" class="screen active px-4">
+      <div class="text-center mb-6">
+        <h2 class="text-3xl font-heavy text-blue-600 slant bg-white p-2 inline-block shadow-md">STUDY QUEST</h2>
+        <p class="text-sm font-bold text-gray-500 mt-2" id="ui-season-text">SEASON 1</p>
+      </div>
+
+      <div class="bg-white rounded-xl p-4 shadow-lg mb-6 slant">
+        <div class="slant-reverse">
+          <h3 class="font-bold text-gray-700 mb-2">クエスト設定</h3>
+          <div class="flex items-center gap-2">
+            <input type="number" id="cfg-start" class="w-full border-2 border-gray-200 rounded p-2 font-heavy text-center" placeholder="開始番号" value="1">
+            <span class="font-bold">〜</span>
+            <input type="number" id="cfg-end" class="w-full border-2 border-gray-200 rounded p-2 font-heavy text-center" placeholder="終了番号" value="500">
+          </div>
+        </div>
+      </div>
+
+      <button onclick="startQuest()" class="w-full bg-gradient-to-r from-orange-400 to-red-500 text-white p-4 rounded-xl shadow-xl slant transform active:scale-95 transition-transform">
+        <div class="slant-reverse text-2xl font-heavy flex items-center justify-center gap-2">
+          <span>⚡</span> クエスト受注 <span>⚡</span>
+        </div>
+      </button>
+
+      <div class="mt-8 bg-white p-4 rounded-xl shadow slant">
+         <div class="slant-reverse">
+           <p class="text-sm text-gray-500 font-bold">TODAY'S HIGHSCORE</p>
+           <p class="text-3xl font-heavy text-yellow-500" id="ui-highscore">0</p>
+         </div>
+      </div>
+      
+      <div class="mt-4 flex justify-end">
+        <button onclick="toggleMute()" id="btn-mute" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-full font-bold text-sm shadow">🔊 SOUND ON</button>
+      </div>
+    </div>
+
+    <!-- ================= QUEST SCREEN ================= -->
+    <div id="screen-quest" class="screen px-4 h-full flex flex-col justify-center">
+      <div class="text-center mb-4">
+        <div class="inline-block bg-white px-6 py-2 rounded-full shadow-lg border-4 border-blue-400 anim-shake" id="quest-combo-box">
+          <p class="text-sm font-bold text-blue-500">COMBO</p>
+          <p class="text-4xl font-heavy text-blue-600" id="quest-combo">0</p>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow-2xl p-8 text-center relative overflow-hidden slant mb-8 border-b-8 border-r-8 border-gray-200">
+        <div class="slant-reverse">
+          <span class="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded hidden" id="quest-weak-badge">WEAK REVENGE</span>
+          <p class="text-gray-500 font-bold text-sm mb-2">TARGET QUESTION</p>
+          <h2 class="text-6xl font-heavy text-gray-800 my-4" id="quest-target-num">Q.0</h2>
+          
+          <div class="w-full bg-gray-200 rounded-full h-4 mt-6 overflow-hidden">
+            <div id="quest-timer-bar" class="bg-gradient-to-r from-green-400 to-blue-500 h-4 w-full transition-all duration-100 ease-linear"></div>
+          </div>
+          <p class="text-right text-xs font-bold text-gray-500 mt-1"><span id="quest-timer-text">30.0</span>s</p>
+        </div>
+      </div>
+
+      <div class="flex gap-4">
+        <button onclick="answerQuest(true)" class="flex-1 bg-gradient-to-r from-green-400 to-emerald-500 text-white p-6 rounded-xl shadow-xl slant transform active:scale-95 transition-transform border-b-4 border-green-700">
+          <div class="slant-reverse text-3xl font-heavy">WIN<br><span class="text-sm">正解</span></div>
+        </button>
+        <button onclick="answerQuest(false)" class="flex-1 bg-gradient-to-r from-gray-400 to-gray-500 text-white p-6 rounded-xl shadow-xl slant transform active:scale-95 transition-transform border-b-4 border-gray-700">
+          <div class="slant-reverse text-2xl font-heavy">LOSE<br><span class="text-sm">不正解</span></div>
+        </button>
+      </div>
+      
+      <div class="mt-4 text-center">
+        <button onclick="switchScreen('home')" class="text-gray-400 font-bold underline">撤退する</button>
+      </div>
+    </div>
+
+    <!-- ================= EQUIP SCREEN ================= -->
+    <div id="screen-equip" class="screen px-4">
+      <h2 class="text-2xl font-heavy text-orange-500 slant bg-white p-2 inline-block shadow-md mb-4">SHOP & EQUIP</h2>
+      
+      <div class="bg-stadium-lanes p-4 rounded-xl shadow-lg slant mb-4 text-white">
+        <div class="slant-reverse text-center drop-shadow-md">
+          <p class="text-sm font-bold">所持 熱血コイン</p>
+          <p class="text-4xl font-heavy" id="equip-coins-display">0</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <!-- Spike -->
+        <div class="bg-white rounded-lg p-3 shadow slant border-l-4 border-red-500">
+          <div class="slant-reverse">
+            <p class="text-xs font-bold text-gray-500">基礎スコアUP</p>
+            <h3 class="font-heavy text-lg">スパイク</h3>
+            <p class="font-heavy text-xl text-red-500 my-1" id="eq-lvl-spike">Lv.1</p>
+            <p class="text-xs text-gray-400 mb-2">Cost: <span id="eq-cost-spike">100</span></p>
+            <button onclick="upgradeEquip('spike')" class="w-full bg-red-500 text-white py-1 rounded font-bold text-sm">強化</button>
+          </div>
+        </div>
+        <!-- Misanga -->
+        <div class="bg-white rounded-lg p-3 shadow slant border-l-4 border-yellow-500">
+          <div class="slant-reverse">
+            <p class="text-xs font-bold text-gray-500">コンボ倍率UP</p>
+            <h3 class="font-heavy text-lg">ミサンガ</h3>
+            <p class="font-heavy text-xl text-yellow-500 my-1" id="eq-lvl-misanga">Lv.1</p>
+            <p class="text-xs text-gray-400 mb-2">Cost: <span id="eq-cost-misanga">100</span></p>
+            <button onclick="upgradeEquip('misanga')" class="w-full bg-yellow-500 text-white py-1 rounded font-bold text-sm">強化</button>
+          </div>
+        </div>
+        <!-- Wristband -->
+        <div class="bg-white rounded-lg p-3 shadow slant border-l-4 border-blue-500">
+          <div class="slant-reverse">
+            <p class="text-xs font-bold text-gray-500">タイマーバフUP</p>
+            <h3 class="font-heavy text-lg">リストバンド</h3>
+            <p class="font-heavy text-xl text-blue-500 my-1" id="eq-lvl-wristband">Lv.1</p>
+            <p class="text-xs text-gray-400 mb-2">Cost: <span id="eq-cost-wristband">100</span></p>
+            <button onclick="upgradeEquip('wristband')" class="w-full bg-blue-500 text-white py-1 rounded font-bold text-sm">強化</button>
+          </div>
+        </div>
+        <!-- Pendant -->
+        <div class="bg-white rounded-lg p-3 shadow slant border-l-4 border-green-500">
+          <div class="slant-reverse">
+            <p class="text-xs font-bold text-gray-500">苦手特効(コインUP)</p>
+            <h3 class="font-heavy text-lg">ペンダント</h3>
+            <p class="font-heavy text-xl text-green-500 my-1" id="eq-lvl-pendant">Lv.1</p>
+            <p class="text-xs text-gray-400 mb-2">Cost: <span id="eq-cost-pendant">100</span></p>
+            <button onclick="upgradeEquip('pendant')" class="w-full bg-green-500 text-white py-1 rounded font-bold text-sm">強化</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= WEAK SCREEN ================= -->
+    <div id="screen-weak" class="screen px-4">
+      <h2 class="text-2xl font-heavy text-purple-600 slant bg-white p-2 inline-block shadow-md mb-4">WEAK LIST</h2>
+      <div class="bg-white rounded-xl shadow p-4 slant">
+        <div class="slant-reverse">
+          <p class="font-bold text-gray-600 mb-2">現在登録されている苦手問題</p>
+          <div id="weak-list-container" class="flex flex-wrap gap-2 max-h-96 overflow-y-auto">
+            <!-- 苦手リストがここに入る -->
+          </div>
+          <p id="weak-empty" class="text-gray-400 font-bold text-sm mt-4 hidden">苦手な問題はありません！素晴らしい！</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SEASON SCREEN ================= -->
+    <div id="screen-season" class="screen px-4 text-center">
+      <h2 class="text-2xl font-heavy text-gray-700 slant bg-white p-2 inline-block shadow-md mb-4">SEASON INFO</h2>
+      <div class="bg-white p-6 rounded-xl shadow slant mt-4">
+        <div class="slant-reverse">
+          <p class="text-gray-500 font-bold">現在のシーズン</p>
+          <p class="text-5xl font-heavy text-blue-600 my-2" id="season-num-disp">1</p>
+          <p class="text-sm font-bold text-gray-400 mb-4">開始日: <span id="season-start-date">YYYY/MM/DD</span></p>
+          <div class="bg-gray-100 p-3 rounded">
+            <p class="text-xs font-bold text-gray-600">※30日経過でシーズンリセットされます。装備のレベルのみ引き継がれます。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer Nav -->
+  <footer class="fixed bottom-0 w-full z-30 p-2 bg-transparent pb-4 pointer-events-auto">
+    <div class="max-w-md mx-auto bg-white rounded-2xl shadow-[0_-4px_15px_rgba(0,0,0,0.1)] flex justify-between p-2 slant border-b-4 border-gray-200">
+      <div class="slant-reverse w-full flex justify-around">
+        <button onclick="switchScreen('home')" class="p-2 text-center text-blue-500 w-1/4">
+          <div class="font-heavy text-lg">🏠</div>
+          <div class="text-[10px] font-bold">HOME</div>
+        </button>
+        <button onclick="switchScreen('equip')" class="p-2 text-center text-orange-500 w-1/4 border-l border-gray-100">
+          <div class="font-heavy text-lg">⚔️</div>
+          <div class="text-[10px] font-bold">装備</div>
+        </button>
+        <button onclick="switchScreen('weak')" class="p-2 text-center text-purple-500 w-1/4 border-l border-gray-100">
+          <div class="font-heavy text-lg">📋</div>
+          <div class="text-[10px] font-bold">監督</div>
+        </button>
+        <button onclick="switchScreen('season')" class="p-2 text-center text-gray-500 w-1/4 border-l border-gray-100">
+          <div class="font-heavy text-lg">🏆</div>
+          <div class="text-[10px] font-bold">編成</div>
+        </button>
+      </div>
+    </div>
+  </footer>
+
+<script>
+/* =========================================
+   State & Storage Management
+========================================= */
+const STORAGE_KEY = 'studyquest_data';
+
+const defaultState = {
+  coins: 0,
+  scoreA: 0,
+  scoreB: 0,
+  scoreC_correct: 0,
+  scoreC_total: 0,
+  combo: 0,
+  highScore: 0,
+  config: { start: 1, end: 500 },
+  queue: [],
+  equip: { spike: 1, misanga: 1, wristband: 1, pendant: 1 },
+  history: [], 
+  season: { number: 1, startDate: Date.now() },
+  lastPlayedDate: new Date().toDateString()
+};
+
+let state = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultState;
+// 互換性チェック
+if(!state.equip) state.equip = defaultState.equip;
+if(!state.history) state.history = [];
+if(!state.season) state.season = defaultState.season;
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  updateUI();
+}
+
+/* =========================================
+   Audio System (Web Audio API)
+========================================= */
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+let isMuted = false;
+
+function initAudio() {
+  if (!audioCtx) audioCtx = new AudioContext();
+}
+
+function playSound(type) {
+  if (isMuted) return;
+  initAudio();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  
+  const now = audioCtx.currentTime;
+  
+  if (type === 'win') {
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.exponentialRampToValueAtTime(1760, now + 0.1);
+    gain.gain.setValueAtTime(0.1, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+    osc.start(now);
+    osc.stop(now + 0.1);
+  } else if (type === 'lose') {
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(150, now);
+    osc.frequency.linearRampToValueAtTime(100, now + 0.3);
+    gain.gain.setValueAtTime(0.1, now);
+    gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+    osc.start(now);
+    osc.stop(now + 0.3);
+  } else if (type === 'combo') {
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1200, now);
+    osc.frequency.setValueAtTime(1600, now + 0.1);
+    gain.gain.setValueAtTime(0.1, now);
+    gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+    osc.start(now);
+    osc.stop(now + 0.2);
+  } else if (type === 'upgrade') {
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(1000, now);
+    osc.frequency.exponentialRampToValueAtTime(2000, now + 0.1);
+    osc.frequency.exponentialRampToValueAtTime(3000, now + 0.2);
+    gain.gain.setValueAtTime(0.1, now);
+    gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+    osc.start(now);
+    osc.stop(now + 0.3);
+  }
+}
+
+function toggleMute() {
+  isMuted = !isMuted;
+  document.getElementById('btn-mute').textContent = isMuted ? '🔇 SOUND OFF' : '🔊 SOUND ON';
+}
+
+/* =========================================
+   Canvas Effects (Lightning & Confetti)
+========================================= */
+const canvas = document.getElementById('canvas-layer');
+const ctx = canvas.getContext('2d');
+let particles = [];
+let lightnings = [];
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function createConfetti() {
+  for(let i=0; i<50; i++) {
+    particles.push({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+      vx: (Math.random() - 0.5) * 15,
+      vy: (Math.random() - 1) * 15,
+      size: Math.random() * 8 + 4,
+      color: ['#fbbf24', '#f97316', '#3b82f6', '#22c55e'][Math.floor(Math.random()*4)],
+      life: 1.0,
+      rot: Math.random() * 360,
+      rotSpeed: (Math.random() - 0.5) * 20
+    });
+  }
+}
+
+function createLightning() {
+  lightnings.push({
+    life: 1.0,
+    path: generateLightningPath()
+  });
+}
+
+function generateLightningPath() {
+  let path = [];
+  let x = Math.random() * window.innerWidth;
+  let y = 0;
+  path.push({x,y});
+  while(y < window.innerHeight) {
+    x += (Math.random() - 0.5) * 100;
+    y += Math.random() * 50 + 20;
+    path.push({x,y});
+  }
+  return path;
+}
+
+function animateCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Particles
+  for(let i = particles.length - 1; i >= 0; i--) {
+    let p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.5; // gravity
+    p.rot += p.rotSpeed;
+    p.life -= 0.02;
+    
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot * Math.PI / 180);
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.life;
+    ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
+    ctx.restore();
+    
+    if(p.life <= 0) particles.splice(i, 1);
+  }
+  
+  // Lightnings
+  for(let i = lightnings.length - 1; i >= 0; i--) {
+    let l = lightnings[i];
+    l.life -= 0.1;
+    
+    ctx.beginPath();
+    ctx.moveTo(l.path[0].x, l.path[0].y);
+    for(let j=1; j<l.path.length; j++) {
+      ctx.lineTo(l.path[j].x, l.path[j].y);
+    }
+    ctx.strokeStyle = `rgba(251, 191, 36, ${l.life})`;
+    ctx.lineWidth = 5;
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = '#fbbf24';
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    
+    if(l.life <= 0) lightnings.splice(i, 1);
+  }
+  
+  requestAnimationFrame(animateCanvas);
+}
+animateCanvas();
+
+/* =========================================
+   Game Logic & System
+========================================= */
+let currentTarget = null;
+let isWeakTarget = false;
+let questTimer = null;
+let timeLeft = 30;
+const MAX_TIME = 30;
+
+function checkReset() {
+  const today = new Date().toDateString();
+  if (state.lastPlayedDate !== today) {
+    state.scoreA = 0; // 日次リセット
+    state.lastPlayedDate = today;
+  }
+  
+  // Season Reset (30 days)
+  const daysDiff = (Date.now() - state.season.startDate) / (1000 * 60 * 60 * 24);
+  if (daysDiff >= 30) {
+    state.season.number += 1;
+    state.season.startDate = Date.now();
+    state.coins = 0;
+    state.scoreA = 0;
+    state.scoreB = 0;
+    state.scoreC_correct = 0;
+    state.scoreC_total = 0;
+    state.combo = 0;
+    state.highScore = 0;
+    state.queue = [];
+    alert(`SEASON ${state.season.number} 開幕！装備を引き継いで新たな戦いへ！`);
+  }
+  saveState();
+}
+
+function updateUI() {
+  animateValue("ui-scoreA", parseInt(document.getElementById("ui-scoreA").innerText.replace(/,/g,'')), state.scoreA, 500);
+  document.getElementById("ui-coins").innerText = state.coins.toLocaleString();
+  document.getElementById("ui-scoreB").innerText = state.scoreB;
+  let rate = state.scoreC_total === 0 ? 0 : (state.scoreC_correct / state.scoreC_total) * 100;
+  document.getElementById("ui-scoreC").innerText = rate.toFixed(1) + "%";
+  document.getElementById("ui-highscore").innerText = state.highScore.toLocaleString();
+  document.getElementById("ui-season-text").innerText = "SEASON " + state.season.number;
+  document.getElementById("quest-combo").innerText = state.combo;
+  
+  // Equip UI
+  document.getElementById('equip-coins-display').innerText = state.coins.toLocaleString();
+  ['spike', 'misanga', 'wristband', 'pendant'].forEach(type => {
+    let lvl = state.equip[type];
+    document.getElementById(`eq-lvl-${type}`).innerText = `Lv.${lvl}`;
+    document.getElementById(`eq-cost-${type}`).innerText = calculateEquipCost(lvl);
+  });
+  
+  // Weak List UI
+  const weakContainer = document.getElementById('weak-list-container');
+  weakContainer.innerHTML = '';
+  if(state.queue.length === 0) {
+    document.getElementById('weak-empty').classList.remove('hidden');
+  } else {
+    document.getElementById('weak-empty').classList.add('hidden');
+    state.queue.forEach(q => {
+      let span = document.createElement('span');
+      span.className = "bg-gray-200 text-gray-700 font-bold px-2 py-1 rounded text-sm slant";
+      span.innerHTML = `<div class="slant-reverse">Q.${q}</div>`;
+      weakContainer.appendChild(span);
+    });
+  }
+
+  // Season UI
+  document.getElementById('season-num-disp').innerText = state.season.number;
+  document.getElementById('season-start-date').innerText = new Date(state.season.startDate).toLocaleDateString();
+
+  updateRPM();
+}
+
+// Rolling Number Animation
+function animateValue(id, start, end, duration) {
+    if (start === end) {
+      document.getElementById(id).innerHTML = end.toLocaleString();
+      return;
+    }
+    let range = end - start;
+    let current = start;
+    let increment = end > start ? Math.ceil(range / (duration / 16)) : -Math.ceil(Math.abs(range) / (duration / 16));
+    let stepTime = Math.abs(Math.floor(duration / (range / increment)));
+    let obj = document.getElementById(id);
+    let timer = setInterval(function() {
+        current += increment;
+        if ((increment > 0 && current >= end) || (increment < 0 && current <= end)) {
+            current = end;
+            clearInterval(timer);
+        }
+        obj.innerHTML = current.toLocaleString();
+    }, stepTime);
+}
+
+function updateRPM() {
+  const now = Date.now();
+  // Remove older than 10 mins (600,000 ms)
+  state.history = state.history.filter(h => now - h.time <= 600000);
+  let rpm = (state.history.length / 10).toFixed(1);
+  document.getElementById("ui-rpm").innerText = rpm;
+}
+setInterval(updateRPM, 5000);
+
+function switchScreen(screenId) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(`screen-${screenId}`).classList.add('active');
+  if(screenId === 'home') checkReset();
+}
+
+function startQuest() {
+  initAudio();
+  state.config.start = parseInt(document.getElementById("cfg-start").value) || 1;
+  state.config.end = parseInt(document.getElementById("cfg-end").value) || 500;
+  saveState();
+
+  // 20% chance from weak queue
+  if (state.queue.length > 0 && Math.random() < 0.2) {
+    currentTarget = state.queue[Math.floor(Math.random() * state.queue.length)];
+    isWeakTarget = true;
+    document.getElementById("quest-weak-badge").classList.remove("hidden");
+  } else {
+    currentTarget = Math.floor(Math.random() * (state.config.end - state.config.start + 1)) + state.config.start;
+    isWeakTarget = false;
+    document.getElementById("quest-weak-badge").classList.add("hidden");
+  }
+
+  // Popup Animation
+  const popup = document.getElementById("quest-popup");
+  const banner = document.getElementById("quest-popup-banner");
+  document.getElementById("quest-popup-text").innerText = `NEW! Q.${currentTarget}`;
+  
+  popup.classList.remove("hidden");
+  banner.classList.remove("anim-pop");
+  void banner.offsetWidth; // trigger reflow
+  banner.classList.add("anim-pop");
+  
+  flashScreen();
+  playSound('upgrade'); // Use upgrade sound as dramatic start
+
+  setTimeout(() => {
+    popup.classList.add("hidden");
+    setupQuestScreen();
+  }, 1200);
+}
+
+function setupQuestScreen() {
+  switchScreen('quest');
+  document.getElementById("quest-target-num").innerText = `Q.${currentTarget}`;
+  timeLeft = MAX_TIME;
+  updateTimerUI();
+  clearInterval(questTimer);
+  questTimer = setInterval(() => {
+    timeLeft -= 0.1;
+    if (timeLeft <= 0) {
+      timeLeft = 0;
+      clearInterval(questTimer);
+      answerQuest(false); // Time out = Lose
+    }
+    updateTimerUI();
+  }, 100);
+}
+
+function updateTimerUI() {
+  document.getElementById("quest-timer-text").innerText = timeLeft.toFixed(1);
+  const bar = document.getElementById("quest-timer-bar");
+  bar.style.width = `${(timeLeft / MAX_TIME) * 100}%`;
+  if(timeLeft < 10) bar.className = "bg-gradient-to-r from-red-500 to-red-600 h-4 w-full transition-all duration-100 ease-linear";
+  else bar.className = "bg-gradient-to-r from-green-400 to-blue-500 h-4 w-full transition-all duration-100 ease-linear";
+}
+
+function flashScreen() {
+  const flash = document.getElementById("flash-overlay");
+  flash.classList.remove("hidden", "anim-flash");
+  void flash.offsetWidth;
+  flash.classList.add("anim-flash");
+  setTimeout(() => flash.classList.add("hidden"), 300);
+}
+
+function triggerComboShake() {
+  const cb = document.getElementById("quest-combo-box");
+  cb.classList.remove("anim-shake");
+  void cb.offsetWidth;
+  cb.classList.add("anim-shake");
+}
+
+function answerQuest(isWin) {
+  clearInterval(questTimer);
+  state.history.push({ time: Date.now() });
+  state.scoreC_total += 1;
+
+  if (isWin) {
+    state.combo += 1;
+    state.scoreC_correct += 1;
+    
+    // Calculate Score with Equip Buffs
+    let spikeBuff = state.equip.spike * 10;
+    let misangaBuff = 1 + (state.equip.misanga * 0.05);
+    let wristbandBuff = 1 + (state.equip.wristband * 0.01);
+    
+    let baseScore = 100 + spikeBuff;
+    let comboMult = state.combo * misangaBuff;
+    let timeMult = Math.max(1, timeLeft) * wristbandBuff;
+    
+    let earnedScore = Math.floor(baseScore * comboMult * timeMult);
+    state.scoreA += earnedScore;
+    
+    if (state.scoreA > state.highScore) state.highScore = state.scoreA;
+
+    // Coins
+    let pendantBuff = 1 + (state.equip.pendant * 0.1);
+    let baseCoin = isWeakTarget ? 50 : 10;
+    state.coins += Math.floor(baseCoin * pendantBuff);
+
+    if (isWeakTarget) {
+      state.scoreB += 1;
+      state.queue = state.queue.filter(q => q !== currentTarget);
+    }
+
+    playSound('win');
+    createConfetti();
+    createLightning();
+    
+    if (state.combo % 5 === 0) {
+      playSound('combo');
+      triggerComboShake();
+    }
+    
+    // Popup Combo text
+    const pt = document.createElement("div");
+    pt.className = "fixed inset-0 flex items-center justify-center pointer-events-none z-50";
+    pt.innerHTML = `<h2 class="text-5xl font-heavy text-yellow-400 drop-shadow-xl slant anim-pop">★★★<br>コンボ確定!</h2>`;
+    document.body.appendChild(pt);
+    setTimeout(() => pt.remove(), 800);
+
+  } else {
+    state.combo = 0;
+    if (!state.queue.includes(currentTarget)) {
+      state.queue.push(currentTarget);
+    }
+    playSound('lose');
+  }
+
+  saveState();
+  
+  // Next Quest immediately
+  setTimeout(startQuest, 300);
+}
+
+/* =========================================
+   Equip / Shop System
+========================================= */
+function calculateEquipCost(lvl) {
+  return 100 * Math.pow(1.5, lvl - 1) | 0;
+}
+
+function upgradeEquip(type) {
+  let cost = calculateEquipCost(state.equip[type]);
+  if (state.coins >= cost && state.equip[type] < 99) {
+    state.coins -= cost;
+    state.equip[type] += 1;
+    playSound('upgrade');
+    
+    // Visual feedback
+    const btn = event.currentTarget;
+    btn.innerText = "Lv UP!!";
+    btn.classList.add("bg-white", "text-black");
+    setTimeout(() => {
+      btn.innerText = "強化";
+      btn.classList.remove("bg-white", "text-black");
+    }, 500);
+
+    saveState();
+  } else {
+    playSound('lose'); // error sound
+  }
+}
+
+// Initial setup
+checkReset();
+updateUI();
+</script>
+</body>
+</html>
+
+```
